@@ -14,9 +14,9 @@ def transcribe_audio_openai(
     Returns { text }.
     """
 
-    api_key = settings.openai_api_key
-    if not api_key:
+    if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY not configured")
+    api_key = settings.openai_api_key.get_secret_value()
 
     path = Path(audio_path)
     if not path.exists():

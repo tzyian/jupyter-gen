@@ -7,8 +7,18 @@ from fastmcp import FastMCP
 
 mcp = FastMCP("mcp2-search-tools")
 
+@mcp.tool
+def search_arxiv_tool(
+    query: str, surveys_only: bool = True, max_results: int = 3
+) -> Dict[str, Any]:
+    return search_arxiv_papers(query, surveys_only, max_results)
 
-# @mcp.tool
+
+@mcp.tool
+def search_tavily_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
+    return search_tavily(query, max_results)
+
+
 def search_arxiv_papers(
     query: str, surveys_only: bool = True, max_results: int = 3
 ) -> Dict[str, Any]:
@@ -45,16 +55,15 @@ def search_arxiv_papers(
     return {"results": items}
 
 
-# @mcp.tool
 def search_tavily(query: str, max_results: int = 5) -> Dict[str, Any]:
     """
     Use Tavily to search the web with a focus on research. If `surveys_only` is True,
     bias the query toward surveys/meta-analyses.
     """
 
-    api_key = settings.tavily_api_key
-    if not api_key:
+    if not settings.tavily_api_key:
         raise RuntimeError("TAVILY_API_KEY not configured")
+    api_key = settings.tavily_api_key.get_secret_value()
 
     client = TavilyClient(api_key=api_key)
     result = client.search(query=query, max_results=max_results)
@@ -70,10 +79,3 @@ def search_tavily(query: str, max_results: int = 5) -> Dict[str, Any]:
         )
 
     return {"results": items}
-
-
-def unit_test_search_arxiv() -> None:
-    res = search_arxiv_papers(
-        query="reinforcement learning", surveys_only=True, max_results=2
-    )
-    print(res)
