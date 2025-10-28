@@ -1,22 +1,27 @@
 # main.py
 import asyncio
-from typing import Dict, TypedDict
+import json
+import logging
+from contextlib import AsyncExitStack
+from typing import Dict, TypedDict, cast
+
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_core.tools import ToolException
+from langchain_mcp_adapters.client import Connection, MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+
 from config import settings
-from utils.telemetry import callbacks_config
 from prompts import (
+    DEFAULT_NOTEBOOK_PATH,
     GENERATIVE_SYSTEM,
     RESEARCH_SYSTEM,
     SUPERVISOR_SYSTEM,
 )
-from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
-from langchain_mcp_adapters.client import MultiServerMCPClient, Connection
-from langchain.agents import create_agent
-from langchain.tools import tool
-from langchain_core.tools import ToolException
-import json
-
-import logging
+from utils.telemetry import callbacks_config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,7 +35,17 @@ class AppState(TypedDict, total=False):
     rounds: int
 
 
-async def build_graph():
+MAX_REVISION_ROUNDS = 2
+
+
+class MCPResources(TypedDict):
+    research_client: MultiServerMCPClient
+    generative_client: MultiServerMCPClient
+    generative_session: object
+    exit_stack: AsyncExitStack
+
+
+async def build_graph() -> tuple[CompiledStateGraph, MCPResources]:
     OPENAI_API_KEY = settings.openai_api_key
     if not OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is not set in environment variables.")
@@ -70,11 +85,26 @@ async def build_graph():
             },
         },
     }
-
     research_mcp = MultiServerMCPClient(research_servers)
     gen_mcp = MultiServerMCPClient(gen_servers)
-    research_tools = await research_mcp.get_tools()
-    gen_tools = await gen_mcp.get_tools()
+    # Keep the Jupyter MCP session open across tool calls.
+    exit_stack = AsyncExitStack()
+    try:
+        research_tools = await research_mcp.get_tools()
+        gen_session = await exit_stack.enter_async_context(
+            gen_mcp.session("Jupyter-MCP")
+        )
+        gen_tools = await load_mcp_tools(gen_session)
+    except Exception:
+        await exit_stack.aclose()
+        raise
+
+    resources: MCPResources = {
+        "research_client": research_mcp,
+        "generative_client": gen_mcp,
+        "generative_session": gen_session,
+        "exit_stack": exit_stack,
+    }
 
     MODEL = "gpt-4o-mini"
 
@@ -110,7 +140,18 @@ async def build_graph():
         """
         try:
             result = await gen_agent.ainvoke(
-                {"messages": [{"role": "user", "content": request}]},
+                {
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Active notebook path: "
+                                f"{DEFAULT_NOTEBOOK_PATH}. Include this path on all Jupyter tool calls."
+                            ),
+                        },
+                        {"role": "user", "content": request},
+                    ]
+                },
                 config=callbacks_config(),
             )
             last_message = result["messages"][-1]
@@ -138,13 +179,24 @@ async def build_graph():
         result = await supervisor_agent.ainvoke(
             {"messages": state.get("messages", [])}, config=callbacks_config()
         )
-        return {"messages": result["messages"]}
+        # Preserve other state keys (rounds, score, notes) when returning.
+        new_state = dict(state)
+        new_state["messages"] = result["messages"]
+        return cast(AppState, new_state)
 
     async def critic_node(state: AppState) -> AppState:
         """Evaluate the supervisor's output"""
         msgs = state.get("messages", [])
         if len(msgs) < 2:
-            return {"score": 0.0, "notes": "No output to evaluate", "rounds": 0}
+            new_state = dict(state)
+            new_state.setdefault("messages", msgs)
+            new_state["score"] = 0.0
+            new_state["notes"] = "No output to evaluate"
+            new_state["rounds"] = state.get("rounds", 0)
+            return cast(AppState, new_state)
+
+        # Track how many revision cycles have executed so far.
+        rounds = state.get("rounds", 0)
 
         # Get last assistant message
         last_msg = msgs[-1]
@@ -172,8 +224,13 @@ async def build_graph():
             logger.warning(f"Failed to parse critic response: {e}")
             score = 0.0
             notes = "Invalid JSON from critic"
-
-        return {"score": score, "notes": notes}
+        # Preserve messages and other state keys when returning updated critique info.
+        new_state = dict(state)
+        new_state["score"] = score
+        new_state["notes"] = notes
+        new_state["rounds"] = rounds + 1
+        new_state["messages"] = msgs
+        return cast(AppState, new_state)
 
     # Routing functions
     def after_critic(state: AppState) -> str:
@@ -181,7 +238,7 @@ async def build_graph():
         score = state.get("score", 0)
         rounds = state.get("rounds", 0)
 
-        if score >= 0.8 or rounds >= 2:
+        if score >= 0.8 or rounds >= MAX_REVISION_ROUNDS:
             return END
 
         # Add revision request to messages
@@ -204,43 +261,50 @@ async def build_graph():
     builder = StateGraph(AppState)
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("critic", critic_node)
-    builder.add_node("increment", increment_rounds)
-
     # Define flow
     builder.add_edge(START, "supervisor")
     builder.add_edge("supervisor", "critic")
-    builder.add_edge("critic", "increment")
     builder.add_conditional_edges(
-        "increment", after_critic, {END: END, "supervisor": "supervisor"}
+        "critic", after_critic, {END: END, "supervisor": "supervisor"}
     )
 
-    return builder.compile(), (research_mcp, gen_mcp)
+    return builder.compile(), resources
 
 
 async def main():
-    graph, (research_mcp, gen_mcp) = await build_graph()
     try:
-        out = await graph.ainvoke(
-            {
-                "messages": [
-                    {"role": "system", "content": SUPERVISOR_SYSTEM},
-                    {
-                        "role": "user",
-                        "content":
-                        # "Create a summary notebook covering reinforcement learning for LLMs. "
-                        "Use Jupyter tools to generate a code cell that prints 2+2, run it, and include the output.",
-                    },
-                ],
-                "rounds": 0,
-            },
-            config=callbacks_config(),
-        )
-        # Final assistant message
-        final_msg = out["messages"][-1]
-        print(getattr(final_msg, "content", str(final_msg)))
+        out = await setup_and_run()
+        messages = out.get("messages", [])
+        if messages:
+            final_msg = messages[-1]
+            print(getattr(final_msg, "content", str(final_msg)))
+        else:
+            print(str(out))
     finally:
-        # MCP clients will be cleaned up automatically
         logger.info("Agent execution completed")
+
+
+async def setup_and_run(
+    initial_messages: list[dict[str, str]] | None = None,
+    initial_rounds: int = 0,
+) -> AppState:
+    graph, resources = await build_graph()
+    try:
+        payload = {
+            "messages": initial_messages
+            or [
+                {"role": "system", "content": SUPERVISOR_SYSTEM},
+                {
+                    "role": "user",
+                    "content": "Use Jupyter tools to generate a code cell that prints 2+2, run it, and include the output.",
+                },
+            ],
+            "rounds": initial_rounds,
+        }
+        result = await graph.ainvoke(payload, config=callbacks_config())
+        return cast(AppState, result)
+    finally:
+        await resources["exit_stack"].aclose()
 
 
 if __name__ == "__main__":
