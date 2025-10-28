@@ -1,0 +1,41 @@
+[project]
+name = "mcp2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "arxiv>=2.2.0",
+    "elevenlabs>=2.20.1",
+    "fastmcp>=2.13.0.1",
+    "ipykernel>=7.1.0",
+    "langchain>=1.0.2",
+    "langchain-openai>=1.0.1",
+    "langchain-tavily>=0.2.12",
+    "langgraph>=1.0.1",
+    "openai>=1.40.0",
+    "tavily-python>=0.3.3",
+    "nbformat>=5.10.0",
+    "typer>=0.12.3",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.4.0",
+    "jupyterlab==4.4.1",
+    "jupyter-collaboration==4.0.2",
+    "jupyter-mcp-tools>=0.1.4",
+    "datalayer_pycrdt==0.12.17",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.14.2"]
+
+# These must be done using pip and not uv
+# uv pip install jupyterlab==4.4.1 jupyter-collaboration==4.0.2 jupyter-mcp-tools>=0.1.4 ipykernel
+# uv pip uninstall pycrdt datalayer_pycrdt
+# uv pip install datalayer_pycrdt==0.12.17
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
