@@ -2,11 +2,25 @@
 # Project Outline
 
 ## 1. Core Features
-- RAG over existing notebooks to locate related `src/` code
-- It should first ask the user what notebook they want to generate, giving a few suggested notebook ideas
-- Then, it should ask what research they want to do, and use Tavily + ArXiv retriever to gather relevant papers
-- It should then generate an outline for the notebook, get user feedback, and then generate the actual code cells
-- It should have the following core features:
+- The first cell when created should automatically be the following in the markdown cell:
+"""
+<img src="images/logo/selene-logo-640.png" style="max-height:75px;" alt="SELENE Logo" />
+
+**Disclaimer:** This Jupyter Notebook contains content generated with the assistance of AI. While every effort has been made to review and validate the outputs, users should independently verify critical information before relying on it. The SELENE notebook repository is constantly evolving. We recommend downloading or pulling the latest version of this notebook from Github.
+"""
+
+- If the user requests a new notebook to be generated but without stating what topic it wants, it should:
+  - RAG over existing notebooks to locate related `src/` code
+  - RAG over existing jupyter notebook topics to see what has already been done
+  - Suggest a few notebook ideas based on gaps in the existing notebooks and codebase
+
+- These notebook ideas should be inserted into the second cell cell as markdown
+- If the user already knows what they want to generate, instead: do research on that topic. 
+- The second cell should then be a markdown cell containing the research findings and relevant URLs
+
+- Then, the agent should generate an outline for the notebook, get user feedback, and then generate the actual code cells
+- The third cell should contain a brief description of the notebook's purpose and structure.
+
 - Use jupyter-mcp-server to interact with the notebook 
 - Use supervisor, research, generative, and reflective agent roles
 - support voice commands using ElevenLabs STT, transcribe to words, then get an agent to do its task
@@ -18,6 +32,7 @@
 
 - Next Edit Prediction
 - ElevenLabs voice controls
+
 - Notebook summarizer with mindmap/Table of Contents generation
 - Generate an outline, get feedback, and then the actual code
 - If possible, integrate with Inkscape MCP as well

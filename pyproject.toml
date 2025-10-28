@@ -23,6 +23,12 @@ dependencies = [
     "jupyter-collaboration==4.0.2",
     "jupyter-mcp-tools>=0.1.4",
     "datalayer_pycrdt==0.12.17",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "seaborn>=0.13.2",
+    "langchain-mcp-adapters>=0.1.11",
+    "langfuse>=3.8.1",
+    "python-dotenv>=1.2.1",
 ]
 
 [dependency-groups]
