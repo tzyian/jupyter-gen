@@ -1,23 +1,11 @@
 ## Quickstart
-
 - Install deps (uv): `uv sync`
-- Configure `.env` from `.env.example` with your API keys
-- Run server: `uv run python -m mcp2.cli run-server`
-- Summarize a notebook: `uv run python -m mcp2.cli summarize path/to.ipynb`
+- Configure `.env` from `.env.example` with your OpenAI and Tavily API keys
+- Run the following manually (required by [jupyter-mcp-server](https://github.com/datalayer/jupyter-mcp-server))
+  - `uv pip uninstall pycrdt datalayer_pycrdt`
+  - `uv pip install datalayer_pycrdt==0.12.17`
+- Run Jupyter lab `jupyter lab --port 8888 --IdentityProvider.token MY_TOKEN --ip 0.0.0.0`
+- `python src/agents/agent.py`
 
-Core MCP tools exposed:
-- `summarize_notebook(notebook)`
-- `next_edit_prediction(notebook, focus_cell_id)`
-- `search_arxiv(query, surveys_only, max_results)`
-- `search_tavily(query, surveys_only, max_results)`
-- `transcribe_audio(audio_path, model)`
-- `transcribe_audio_openai(audio_path, model)`
-- `process_transcript(transcript, notebook?)`
+This project uses the [arXiv API](https://info.arxiv.org/help/api/index.html): Thank you to arXiv for use of its open access interoperability.
 
-Voice flow (STT only):
-- Record in Jupyter UI, save to a temp file, call `transcribe_audio` (ElevenLabs scribe_v1).
-- Pass the returned `text` to `process_transcript` (optionally include the active notebook JSON) to get next actions.
-
-CLI examples:
-- ElevenLabs STT: `uv run python -m mcp2.cli transcribe path/to.wav`
-- OpenAI Whisper STT: `uv run python -m mcp2.cli transcribe-openai path/to.wav`

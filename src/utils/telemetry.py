@@ -1,8 +1,7 @@
 from dotenv import load_dotenv
-from langfuse.langchain import CallbackHandler
 from langchain_core.runnables import RunnableConfig
-
 from langfuse import get_client
+from langfuse.langchain import CallbackHandler
 
 # Load environment variables from .env file
 load_dotenv()

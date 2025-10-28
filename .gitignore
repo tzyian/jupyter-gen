@@ -10,3 +10,8 @@ wheels/
 .venv
 .env
 .jupyter_ystore.db
+.vscode/mcp.json
+
+.ipynb_checkpoints
+.DS_Store
+generated/

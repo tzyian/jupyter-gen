@@ -15,6 +15,7 @@
 
 ## Coding Style & Naming Conventions
 - Imports should be at the top of the file
+- Always use type hints for function signatures
 - Avoid `#noqa`, `#type ignore`, `#ignore`, `#pragma no cover`, `# pyright: ignore` or similar ignores unless absolutely necessary; prefer fixing lint/type issues.
 - Avoid `typing.Any` where possible; prefer precise types.
 - Don't use lazy imports, put all imports at the top of the file.

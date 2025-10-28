@@ -1,9 +1,10 @@
 from typing import Any, Dict, List, Optional
-import arxiv
-from tavily import TavilyClient
-from config import settings
-from fastmcp import FastMCP
 
+import arxiv
+from fastmcp import FastMCP
+from tavily import TavilyClient
+
+from config import settings
 
 mcp = FastMCP("mcp2-search-tools")
 

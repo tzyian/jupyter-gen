@@ -1,9 +1,11 @@
 import mimetypes
 from pathlib import Path
-from elevenlabs import ElevenLabs
 from typing import Any, Dict
-from mcp2.config import settings
+
+from elevenlabs import ElevenLabs
 from openai import OpenAI
+
+from config import settings
 
 
 def transcribe_audio_openai(

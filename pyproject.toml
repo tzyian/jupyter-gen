@@ -32,7 +32,11 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff>=0.14.2"]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "ruff>=0.14.2",
+]
 
 # These must be done using pip and not uv
 # uv pip install jupyterlab==4.4.1 jupyter-collaboration==4.0.2 jupyter-mcp-tools>=0.1.4 ipykernel
@@ -45,3 +49,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+extend-select = ["I"]

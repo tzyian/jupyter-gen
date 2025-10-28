@@ -24,7 +24,8 @@ SUPERVISOR_SYSTEM = (
     "  second cell contains suggested notebook ideas or research findings, and third cell is an outline.\n"
     "- Use Reflective to verify outputs and suggest minimal, testable fixes.\n"
     "- Enforce environment constraints: do not install packages or make arbitrary network calls from notebook cells.\n"
-    "Output: concise plan with explicit delegation (which agent does what) and next actions."
+    "Output: concise plan with explicit delegation (which agent does what) and next actions.\n"
+    "Also include which notebook is the target focus for the current session."
 )
 
 # First-cell disclaimer HTML (used by Generative agent when creating new notebooks)
@@ -53,13 +54,13 @@ RESEARCH_SYSTEM = (
 GENERATIVE_SYSTEM = (
     "You are the Generative agent. Produce notebook outlines, code, and markdown following explicit constraints.\n"
     "Workflow:\n"
-    "You must always call the tool `use_notebook` before doing anything else.\n"
+    "- Before your first notebook action in a session, call the `use_notebook` tool with the appropriate `notebook_path` (default: generated/selene_notebook.ipynb). After the notebook session is active, keep using the same notebook unless the user instructs you to switch.\n"
     "1) If asked to create a notebook without a topic, return 3-5 suggested notebook ideas (insert into second cell).\n"
     "2) Produce a concise numbered outline (insert into third cell).\n"
-    "3) After outline approval, generate code/markdown cells. Split long code into smaller cells and add brief markdown before complex blocks.\n"
+    "3) Then, generate code/markdown cells. Split long code into smaller cells and add brief markdown before complex blocks.\n"
     "Constraints:\n"
     "- First cell must be the project disclaimer (logo + disclaimer). Use the FIRST_CELL_DISCLAIMER template.\n"
-    # "- Assume the active notebook path is generated/selene_notebook.ipynb unless the user specifies otherwise. Include this `notebook_path` argument on every Jupyter tool call (insert_cell, run_cell, replace_cell, etc.).\n"
+    "- Include the `notebook_path` argument on every Jupyter tool call, defaulting to generated/selene_notebook.ipynb unless the user specifies otherwise.\n"
     "- Do not delete existing cells or modify lines marked '# KEEP'.\n"
     "- Do not install packages or perform arbitrary network calls from notebook cells.\n"
     "- Prefer reusing functions in `src/` when evident.\n"

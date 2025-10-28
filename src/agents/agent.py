@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import time
 from contextlib import AsyncExitStack
 from typing import Dict, TypedDict, cast
 
@@ -117,6 +118,41 @@ async def build_graph() -> tuple[CompiledStateGraph, MCPResources]:
         research_llm, research_tools, system_prompt=RESEARCH_SYSTEM
     )
     gen_agent = create_agent(gen_llm, gen_tools, system_prompt=GENERATIVE_SYSTEM)
+    gen_history: list = []
+    notebook_initialized = False
+
+    def _should_drop_instruction(message: object) -> bool:
+        content = getattr(message, "content", None)
+        role = getattr(message, "role", None) or getattr(message, "type", None)
+        if isinstance(message, dict):
+            content = message.get("content", content)
+            role = message.get("role", role)
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for part in content:
+                if isinstance(part, dict):
+                    text_parts.append(str(part.get("text", "")))
+                else:
+                    text_parts.append(str(part))
+            content_text = "".join(text_parts)
+        else:
+            content_text = str(content) if content is not None else ""
+        return role == "system" and content_text.startswith("Active notebook path: ")
+
+    def _detect_use_notebook(messages: list) -> bool:
+        for message in messages:
+            tool_calls = getattr(message, "tool_calls", None)
+            if tool_calls is None and isinstance(message, dict):
+                tool_calls = message.get("tool_calls")
+            if not tool_calls:
+                continue
+            for call in tool_calls:
+                name = getattr(call, "name", None)
+                if name is None and isinstance(call, dict):
+                    name = call.get("name")
+                if name == "use_notebook":
+                    return True
+        return False
 
     # Wrap agents as tools for supervisor
     @tool
@@ -138,24 +174,37 @@ async def build_graph() -> tuple[CompiledStateGraph, MCPResources]:
 
         Use this to create notebooks, write code, run cells, and work with Jupyter.
         """
+        nonlocal gen_history, notebook_initialized
         try:
+            messages = list(gen_history)
+            if notebook_initialized:
+                path_instruction = (
+                    "Active notebook path: "
+                    f"{DEFAULT_NOTEBOOK_PATH}. Include this path on all Jupyter tool calls. "
+                    "Notebook session already active; continue working in the same notebook and do not call `use_notebook` again unless you are switching files."
+                )
+            else:
+                path_instruction = (
+                    "Active notebook path: "
+                    f"{DEFAULT_NOTEBOOK_PATH}. Include this path on all Jupyter tool calls. "
+                    "Call the `use_notebook` tool once (mode 'connect') before other notebook actions if it has not been run in this session."
+                )
+            messages.append({"role": "system", "content": path_instruction})
+            messages.append({"role": "user", "content": request})
             result = await gen_agent.ainvoke(
-                {
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "Active notebook path: "
-                                f"{DEFAULT_NOTEBOOK_PATH}. Include this path on all Jupyter tool calls."
-                            ),
-                        },
-                        {"role": "user", "content": request},
-                    ]
-                },
+                {"messages": messages},
                 config=callbacks_config(),
             )
-            last_message = result["messages"][-1]
-            return getattr(last_message, "content", str(last_message))
+            conversation = result["messages"]
+            gen_history = [
+                msg for msg in conversation if not _should_drop_instruction(msg)
+            ]
+            if not notebook_initialized and _detect_use_notebook(conversation):
+                notebook_initialized = True
+            if conversation:
+                last_message = conversation[-1]
+                return getattr(last_message, "content", str(last_message))
+            return ""
         except ToolException as exc:
             logger.warning("Notebook tool failed: %s", exc, exc_info=True)
             return (
@@ -253,10 +302,6 @@ async def build_graph() -> tuple[CompiledStateGraph, MCPResources]:
 
         return "supervisor"
 
-    def increment_rounds(state: AppState) -> AppState:
-        """Increment the round counter"""
-        return {"rounds": state.get("rounds", 0) + 1}
-
     # Build the graph
     builder = StateGraph(AppState)
     builder.add_node("supervisor", supervisor_node)
@@ -296,7 +341,7 @@ async def setup_and_run(
                 {"role": "system", "content": SUPERVISOR_SYSTEM},
                 {
                     "role": "user",
-                    "content": "Use Jupyter tools to generate a code cell that prints 2+2, run it, and include the output.",
+                    "content": "Use Jupyter to introduce linear regression.",
                 },
             ],
             "rounds": initial_rounds,
@@ -308,4 +353,7 @@ async def setup_and_run(
 
 
 if __name__ == "__main__":
+    start_time = time.perf_counter()
     asyncio.run(main())
+    end_time = time.perf_counter()
+    print(f"Execution time: {end_time - start_time} seconds")
